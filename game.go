@@ -221,17 +221,32 @@ func (gs *GameState) PlacePiece(piece *Piece, pos Postion) (*GameState, error) {
 	// remove full rows and columns
 	for _, index := range removingPieces {
 		if index < 8 { // row
-			gs.Score += 50 * rowsRemoved // increase score for each row removed
+			gs.Score += 1000 * rowsRemoved // increase score for each row removed
 			rowsRemoved++
 			for x := 0; x < 8; x++ {
 				newState.Board &^= (1 << (index*8 + x))
 			}
 		} else { // column
 			colIndex := index - 8
-			gs.Score += 50 * rowsRemoved // increase score for each column removed
+			gs.Score += 1000 * rowsRemoved // increase score for each column removed
 			rowsRemoved++
 			for y := 0; y < 8; y++ {
 				newState.Board &^= (1 << (y*8 + colIndex))
+			}
+		}
+	}
+
+	// if the board is compleately cleared add 400 to the score
+	if newState.Board == 0 {
+		newState.Score += 400
+	}
+
+	// add 1 too the score for each empty block
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			pos := y*8 + x
+			if newState.Board&(1<<pos) == 0 { // empty block
+				newState.Score += 1 // increase score for each empty block
 			}
 		}
 	}
@@ -349,6 +364,13 @@ func (gs *GameState) FindBestMove() []Move {
 						break // Skip this job if it collides with existing pieces
 					}
 
+					// Check if the piece fits on the board
+					if !piece.fitsOnBoard(Pos.X, Pos.Y, 8, 8) {
+						CurrBoard.Score = -1000000000000 // Invalid job, piece does not fit on the board
+						IsValid = false
+						break // Skip this job if it does not fit on the board
+					}
+
 					var err error
 					CurrBoard, err = CurrBoard.PlacePiece(&gs.Pieces[Order[ThisJob.OrderIndex][pieceIndex]], Pos)
 					if err != nil {
@@ -368,6 +390,11 @@ func (gs *GameState) FindBestMove() []Move {
 
 					CurrBoard.Penalize()
 					ThisJob.Score = CurrBoard.Score
+
+					emptySections := CurrBoard.countEmptySections()
+					if emptySections > 1 {
+						ThisJob.Score -= emptySections * 100 // Penalize for multiple empty sections
+					}
 
 					// If we reach here, all pieces were placed successfully
 					ValidJobsMutex.Lock()
@@ -423,4 +450,58 @@ func (gs *GameState) FindBestMove() []Move {
 
 	return bestMoves
 
+}
+
+// Add this function to validate piece placement
+func (p Piece) fitsOnBoard(startX, startY, boardWidth, boardHeight int) bool {
+	for y, row := range p {
+		for x, filled := range row {
+			if filled {
+				boardX := startX + x
+				boardY := startY + y
+				if boardX < 0 || boardX >= boardWidth || boardY < 0 || boardY >= boardHeight {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+// Add this method to the GameState struct
+
+func (gs *GameState) countEmptySections() int {
+	visited := make([]bool, 64)
+	sections := 0
+
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			pos := y*8 + x
+			if gs.Board&(1<<pos) == 0 && !visited[pos] { // empty block not visited
+				sections++
+				gs.floodFillEmpty(x, y, visited)
+			}
+		}
+	}
+
+	return sections
+}
+
+func (gs *GameState) floodFillEmpty(x, y int, visited []bool) {
+	if x < 0 || x >= 8 || y < 0 || y >= 8 {
+		return
+	}
+
+	pos := y*8 + x
+	if visited[pos] || gs.Board&(1<<pos) != 0 { // already visited or not empty
+		return
+	}
+
+	visited[pos] = true
+
+	// Recursively fill adjacent empty cells (4-directional)
+	gs.floodFillEmpty(x+1, y, visited)
+	gs.floodFillEmpty(x-1, y, visited)
+	gs.floodFillEmpty(x, y+1, visited)
+	gs.floodFillEmpty(x, y-1, visited)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"time"
@@ -201,12 +202,15 @@ func doRound() {
 
 		// get the magnitude of the swipe
 		magnitude := math.Sqrt(float64((endPos.X-startPos.X)*(endPos.X-startPos.X) + (endPos.Y-startPos.Y)*(endPos.Y-startPos.Y)))
-		swipeTime := magnitude / 500 // adjust the swipe time based on the distance
+		swipeTime := magnitude / 400 // adjust the swipe time based on the distance
 
 		// convert to ms
 		swipeTime = swipeTime * 1000 // convert to milliseconds
 
 		println("Swipe time:", fmt.Sprintf("%.2f", swipeTime))
+
+		swipeEnd.X += rand.Intn(10) - 5
+		swipeEnd.Y += rand.Intn(10) - 5
 
 		exec.Command(ADB_PATH, "shell", "input", "swipe", fmt.Sprintf("%d", startPos.X), fmt.Sprintf("%d", startPos.Y), fmt.Sprintf("%d", swipeEnd.X), fmt.Sprintf("%d", swipeEnd.Y), fmt.Sprintf("%d", int(swipeTime))).Run()
 
